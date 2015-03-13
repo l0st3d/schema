@@ -174,6 +174,11 @@
     (metadata-handler #(assoc % ::unique-paths (conj (or (::unique-paths %) []) data-path)))
     data))
 
+(defn foreign-key [entity]
+  (fn [data data-path error-handler metadata-handler]
+    (metadata-handler #(assoc-in % (into [::foreign-key-paths] data-path) entity))
+    data))
+
 ;; data cleaners
 (defn trimmed [f]
   (comp #(if (string? %) (.trim %) %) f))

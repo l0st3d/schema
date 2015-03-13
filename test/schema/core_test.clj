@@ -9,8 +9,9 @@
     (let [person (s/with-modifications
                    (s/with-defaults
                      (s/map-of :id (s/all-of (s/is-integer) (s/unique))
-                               :company-id (s/one-of (s/is-integer)
-                                                     (s/is-nil))
+                               :company-id (s/all-of (s/one-of (s/is-integer)
+                                                               (s/is-nil))
+                                                     (s/foreign-key :company))
                                :active (s/is-boolean)
                                :name (s/trimmed (s/is-string))
                                :date-of-birth (s/is-date)
@@ -27,7 +28,7 @@
                      :active true)
                    (fn [{:keys [favourite-foods] :as p}]
                      (assoc p :favourite-foods (map st/lower-case favourite-foods))))
-          company (s/map-of :id (s/is-integer)
+          company (s/map-of :id (s/all-of (s/is-integer) (s/unique))
                             :name (s/is-string))
           expected-person {:id 1
                            :active true
@@ -76,4 +77,4 @@
           (is (= (assoc expected-person :date-of-birth #inst "2000-01-01T12:34:56.789Z" :some-numbers [1M 2.5M] :favourite-foods ["dougnuts"] :company-id 1)
                  (new-p 1 c "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5])))))
       (testing "metadata"
-        (is (= {::s/unique-paths [[:id]] ::s/valid true} (meta (s/validate test-data person))))))))
+        (is (= {::s/unique-paths [[:id]] ::s/valid true ::s/foreign-key-paths {:company-id :company}} (meta (s/validate test-data person))))))))
