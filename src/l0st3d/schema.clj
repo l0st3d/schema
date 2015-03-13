@@ -5,16 +5,13 @@
 
 (defn- collect-errors []
   (let [errors (atom [])
-        fkey-paths (atom [])
-        unique-paths (atom [])]
+        metadata (atom {})]
     {:error-handler (fn [err data-path data]
                       (swap! errors conj (str data-path (when data-path " ") err))
                       data)
-     :fkey-handler (fn [data-path] (swap! fkey-paths conj data-path))
-     :unique-handler (fn [data-path] (swap! unique-paths conj data-path))
+     :metadata-handler (fn [f] (swap! metadata f))
      :get-errors (fn [] @errors)
-     :get-unique-paths (fn [] @unique-paths)
-     :get-forgien-key-paths (fn [] @fkey-paths)}))
+     :get-metadata (fn [] @metadata)}))
 
 (defn- check-valid [e validation-fn error-handler data-path err-msg]
   (cond (and (fn? validation-fn) (not (validation-fn e)))
@@ -26,16 +23,16 @@
         :else
         e))
 
-(defn- validate-element [type-def data data-path error-handler unique-handler fkey-handler]
+(defn- validate-element [type-def data data-path error-handler metadata-handler]
   (if (fn? type-def)
-    (type-def data data-path error-handler unique-handler fkey-handler)
+    (type-def data data-path error-handler metadata-handler)
     (throw (ex-info "unknown type-def" {:type-def type-def}))))
 
 ;; validation fns
 (defn is-string
   ([] (is-string nil nil))
   ([validation-fn err-msg]
-     (fn [e data-path error-handler unique-handler fkey-handler]
+     (fn [e data-path error-handler metadata-handler]
        (if (string? e)
          (check-valid e validation-fn error-handler data-path err-msg)
          (error-handler "should be a string" data-path e)))))
@@ -43,13 +40,13 @@
 (defn is-keyword
   ([] (is-keyword nil nil))
   ([validation-fn err-msg]
-     (fn [e data-path error-handler unique-handler fkey-handler]
+     (fn [e data-path error-handler metadata-handler]
        (if (keyword? e)
          (check-valid e validation-fn error-handler data-path err-msg)
          (error-handler "should be a keyword" data-path e)))))
 
 (defn is-boolean []
-  (fn [e data-path error-handler unique-handler fkey-handler]
+  (fn [e data-path error-handler metadata-handler]
     (if (contains? #{true false nil "true" "false" "TRUE" "FALSE"} e)
       (contains? #{true "true" "TRUE"} e)
       (error-handler "should be a boolean" data-path e))))
@@ -57,7 +54,7 @@
 (defn is-integer
   ([] (is-integer nil nil))
   ([validation-fn err-msg]
-     (fn [e data-path error-handler unique-handler fkey-handler]
+     (fn [e data-path error-handler metadata-handler]
        (cond (number? e) (check-valid e validation-fn error-handler data-path err-msg)
              (string? e) (try (-> e Long/parseLong (check-valid validation-fn error-handler data-path err-msg)) (catch Exception ex (error-handler "should be a number" data-path e)))
              :else (error-handler "should be a number" data-path e)))))
@@ -65,14 +62,14 @@
 (defn is-decimal
   ([] (is-decimal nil nil))
   ([validation-fn err-msg]
-     (fn [e data-path error-handler unique-handler fkey-handler]
+     (fn [e data-path error-handler metadata-handler]
        (cond (number? e) (check-valid (bigdec e) validation-fn error-handler data-path err-msg)
              (string? e) (try (-> e BigDecimal. (check-valid validation-fn error-handler data-path err-msg)) (catch Exception ex (error-handler "should be a decimal" data-path e)))
              :else (error-handler "should be a decimal" data-path e)))))
 
 (defn is-date []
   (let [parse-fmts [(DateTimeFormat/forPattern "yyyy-MM-dd'T'HH:mm:ss.SSSZ") (DateTimeFormat/forPattern "EEE, dd MMM yyyy HH:mm:ss zzz")]]
-    (fn [e data-path error-handler unique-handler fkey-handler]
+    (fn [e data-path error-handler metadata-handler]
       (cond (instance? java.util.Date e) e
             (string? e) (if (re-matches #"[0-9]+" e)
                           (Date. (Long. (str e "000")))
@@ -80,20 +77,20 @@
             :else (error-handler "should be a date" data-path e)))))
 
 (defn should-exist []
-  (fn [data data-path error-handler unique-handler fkey-handler]
+  (fn [data data-path error-handler metadata-handler]
     (if (nil? data)
       (error-handler "should exist" data-path data)
       data)))
 
 (defn is-nil []
-  (fn [data data-path error-handler unique-handler fkey-handler]
+  (fn [data data-path error-handler metadata-handler]
     (when-not (nil? data)
       (error-handler "should be nil" data-path data))))
 
 (defn equals
   ([v] (equals v (str "Should be '" v "'")))
   ([v error-message]
-     (fn [data data-path error-handler unique-handler fkey-handler]
+     (fn [data data-path error-handler metadata-handler]
        (if (not= v data)
          (error-handler error-message data-path data)
          v))))
@@ -102,10 +99,10 @@
 (defn map-of [& keys-and-vals]
   (with-meta
     (let [keys-and-vals (apply hash-map keys-and-vals)]
-      (fn [data data-path error-handler unique-handler fkey-handler]
+      (fn [data data-path error-handler metadata-handler]
         (if (map? data)
           (reduce (fn [m [k val-type-def]]
-                    (let [d (validate-element val-type-def (get data k) (conj data-path k) error-handler unique-handler fkey-handler)]
+                    (let [d (validate-element val-type-def (get data k) (conj data-path k) error-handler metadata-handler)]
                       (if (contains? data k)
                         (assoc m k d)
                         m))) {} keys-and-vals)
@@ -115,15 +112,15 @@
        ::map-vals (map second p)})))
 
 (defn list-of [type-def]
-  (fn [data data-path error-handler unique-handler fkey-handler]
+  (fn [data data-path error-handler metadata-handler]
     (if (sequential? data)
       (->> data
-        (map #(validate-element type-def %2 (conj data-path %1) error-handler unique-handler fkey-handler) (iterate inc 0))
+        (map #(validate-element type-def %2 (conj data-path %1) error-handler metadata-handler) (iterate inc 0))
         (into []))
       (error-handler "should be a list" data-path data))))
 
 (defn one-of [& type-defs]
-  (fn [data data-path error-handler unique-handler fkey-handler]
+  (fn [data data-path error-handler metadata-handler]
     (let [one-of-errors (atom [])
           one-of-error-handler-called (atom nil)
           one-of-error-handler (fn [err data-path data]
@@ -133,7 +130,7 @@
       (loop [tds type-defs]
         (if (seq tds) 
           (let [td (first tds)
-                r (validate-element td data data-path one-of-error-handler unique-handler fkey-handler)]
+                r (validate-element td data data-path one-of-error-handler metadata-handler)]
             (if @one-of-error-handler-called
               (do (swap! one-of-error-handler-called (constantly nil))
                   (recur (next tds)))
@@ -141,20 +138,20 @@
           (error-handler (->> @one-of-errors (interpose " or ") (apply str)) data-path data))))))
 
 (defn all-of [& type-defs]
-  (fn [data data-path error-handler unique-handler fkey-handler]
-    (let [c (map #(validate-element % data data-path error-handler unique-handler fkey-handler) type-defs)]
+  (fn [data data-path error-handler metadata-handler]
+    (let [c (map #(validate-element % data data-path error-handler metadata-handler) type-defs)]
       (when (every? identity (doall c))
         (first c)))))
 
 (defn count-is [message func & args]
-  (fn [data data-path error-handler unique-handler fkey-handler]
+  (fn [data data-path error-handler metadata-handler]
     (when-not (apply func (count data) args)
       (error-handler (str "count should be " message) data-path data))
     data))
 
 (defn with-defaults [type-def & {:as defaults}]
-  (with-meta (fn [data data-path error-handler unique-handler fkey-handler]
-               (validate-element type-def (merge data (apply dissoc defaults (keys data))) data-path error-handler unique-handler fkey-handler))
+  (with-meta (fn [data data-path error-handler metadata-handler]
+               (validate-element type-def (merge data (apply dissoc defaults (keys data))) data-path error-handler metadata-handler))
     (let [ks (::map-keys (meta type-def))
           vs (::map-vals (meta type-def))
           kvs (remove nil? (map #(when-not (get defaults %1) [%1 %2]) ks vs))]
@@ -163,9 +160,9 @@
 
 (defn with-modifications [type-def & modifier-fns]
   (with-meta
-    (fn [data data-path error-handler unique-handler fkey-handler]
+    (fn [data data-path error-handler metadata-handler]
       (try
-        (reduce #(%2 %1) (validate-element type-def data data-path error-handler unique-handler fkey-handler) modifier-fns)
+        (reduce #(%2 %1) (validate-element type-def data data-path error-handler metadata-handler) modifier-fns)
         (catch Throwable t
           (error-handler (str "Modification Exception : " t) data-path data)
           data)))
@@ -173,9 +170,8 @@
 
 ;; constraints
 (defn unique []
-  (fn [data data-path error-handler unique-handler fkey-handler] ;TODO change all these fns so that we can collect unique cols and search for them in repository ... also do foreign key checks??
-    (when (fn? unique-handler)
-      (unique-handler data-path))
+  (fn [data data-path error-handler metadata-handler]
+    (metadata-handler #(assoc % ::unique-paths (conj (or (::unique-paths %) []) data-path)))
     data))
 
 ;; data cleaners
@@ -187,21 +183,21 @@
 
 ;; API
 (defn get-errors [data type-def]
-  (let [{:keys [error-handler unique-handler fkey-handler get-errors get-forgien-key-paths get-unique-paths]} (collect-errors)]
-    (validate-element type-def data [] error-handler unique-handler fkey-handler)
+  (let [{:keys [error-handler metadata-handler get-errors get-forgien-key-paths get-metadata]} (collect-errors)]
+    (validate-element type-def data [] error-handler metadata-handler)
     (get-errors)))
 
 (defn get-data-ignoring-errors [data type-def]
-  (let [{:keys [error-handler unique-handler fkey-handler get-errors get-forgien-key-paths get-unique-paths]} (collect-errors)
-        d (validate-element type-def data [] #(-> %& (nth 2)) unique-handler fkey-handler)]
-    (with-meta d {::valid nil ::unique-paths (get-unique-paths) ::forgien-key-paths (get-forgien-key-paths)})))
+  (let [{:keys [error-handler metadata-handler get-errors get-forgien-key-paths get-metadata]} (collect-errors)
+        d (validate-element type-def data [] #(-> %& (nth 2)) metadata-handler)]
+    (with-meta d (merge (get-metadata) {::valid nil}))))
 
 (defn validate [data type-def]
-  (let [{:keys [error-handler unique-handler fkey-handler get-errors get-forgien-key-paths get-unique-paths]} (collect-errors)
-        d (if (-> data meta ::valid) data (validate-element type-def data [] error-handler unique-handler fkey-handler))]
+  (let [{:keys [error-handler metadata-handler get-errors get-forgien-key-paths get-metadata]} (collect-errors)
+        d (if (-> data meta ::valid) data (validate-element type-def data [] error-handler metadata-handler))]
     (if-let [errs (not-empty (get-errors))]
       (throw (ex-info "there were validation errors" {:message "there were validation errors" :errors errs :handle :validation-errors :data data}))
-      (with-meta d {::valid true ::unique-paths (get-unique-paths) ::forgien-key-paths (get-forgien-key-paths)}))))
+      (with-meta d (merge (get-metadata) {::valid true})))))
 
 (defn merge-and-validate [new data type-def]
   (validate (merge data new) type-def))

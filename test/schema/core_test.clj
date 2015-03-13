@@ -8,7 +8,7 @@
   (testing "data structures"
     (let [person (s/with-modifications
                    (s/with-defaults
-                     (s/map-of :id (s/is-integer)
+                     (s/map-of :id (s/all-of (s/is-integer) (s/unique))
                                :company-id (s/one-of (s/is-integer)
                                                      (s/is-nil))
                                :active (s/is-boolean)
@@ -74,4 +74,6 @@
               new-c (s/get-constructor company)
               c (new-c 1 "ACME Ltd")]
           (is (= (assoc expected-person :date-of-birth #inst "2000-01-01T12:34:56.789Z" :some-numbers [1M 2.5M] :favourite-foods ["dougnuts"] :company-id 1)
-                 (new-p 1 c "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5]))))))))
+                 (new-p 1 c "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5])))))
+      (testing "metadata"
+        (is (= {::s/unique-paths [[:id]] ::s/valid true} (meta (s/validate test-data person))))))))
