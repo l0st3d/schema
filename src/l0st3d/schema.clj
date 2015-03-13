@@ -188,17 +188,17 @@
 
 ;; API
 (defn get-errors [data type-def]
-  (let [{:keys [error-handler metadata-handler get-errors get-forgien-key-paths get-metadata]} (collect-errors)]
+  (let [{:keys [error-handler metadata-handler get-errors get-metadata]} (collect-errors)]
     (validate-element type-def data [] error-handler metadata-handler)
     (get-errors)))
 
 (defn get-data-ignoring-errors [data type-def]
-  (let [{:keys [error-handler metadata-handler get-errors get-forgien-key-paths get-metadata]} (collect-errors)
+  (let [{:keys [error-handler metadata-handler get-errors get-metadata]} (collect-errors)
         d (validate-element type-def data [] #(-> %& (nth 2)) metadata-handler)]
     (with-meta d (merge (get-metadata) {::valid nil}))))
 
 (defn validate [data type-def]
-  (let [{:keys [error-handler metadata-handler get-errors get-forgien-key-paths get-metadata]} (collect-errors)
+  (let [{:keys [error-handler metadata-handler get-errors get-metadata]} (collect-errors)
         d (if (-> data meta ::valid) data (validate-element type-def data [] error-handler metadata-handler))]
     (if-let [errs (not-empty (get-errors))]
       (throw (ex-info "there were validation errors" {:message "there were validation errors" :errors errs :handle :validation-errors :data data}))
