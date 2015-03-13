@@ -2,7 +2,8 @@
   (:require [clojure.test :refer :all]
             [clojure.string :as st]
             [l0st3d.util.schema :as s])
-  (:import [java.util Date]))
+  (:import [java.util Date]
+           [clojure.lang ExceptionInfo]))
 
 (deftest should-validate-some-data
   (testing "data structures"
@@ -54,13 +55,13 @@
                (-> test-data
                  (assoc :favourite-foods ["APPLES" "Oranges"])
                  (s/validate person)))))
-      (testing "get errors"
-        (is (= #{"[:roles] Should be ':normal-user' or Should be ':admin-user' or Should be ':read-only'"
-                 "[:id] should be a number"}
-            (into #{}
-                  (-> test-data
-                    (assoc :roles :super-user :id "not a number")
-                    (s/get-errors person))))))
+      (let [test-data (assoc test-data :roles :super-user :id "not a number")]
+        (testing "get errors"
+          (is (= #{"[:roles] Should be ':normal-user' or Should be ':admin-user' or Should be ':read-only'"
+                   "[:id] should be a number"}
+                 (into #{} (s/get-errors test-data person)))))
+        (testing "validation throws exceptions"
+          (is (thrown? ExceptionInfo (s/validate test-data person)))))
       (testing "get data ignoring errors"
         (is (= (-> expected-person
                  (assoc :roles :super-user :id "not a number" :favourite-foods ["dougnuts"]))
