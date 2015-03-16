@@ -197,12 +197,16 @@
         d (validate-element type-def data [] #(-> %& (nth 2)) metadata-handler)]
     (with-meta d (merge (get-metadata) {::valid nil}))))
 
-(defn validate [data type-def]
-  (let [{:keys [error-handler metadata-handler get-errors get-metadata]} (collect-errors)
-        d (if (-> data meta ::valid) data (validate-element type-def data [] error-handler metadata-handler))]
-    (if-let [errs (not-empty (get-errors))]
-      (throw (ex-info "there were validation errors" {:message "there were validation errors" :errors errs :handle :validation-errors :data data}))
-      (with-meta d (merge (get-metadata) {::valid true})))))
+(defn validate
+  ([type-def]
+   (fn [data]
+     (let [{:keys [error-handler metadata-handler get-errors get-metadata]} (collect-errors)
+           d (if (-> data meta ::valid) data (validate-element type-def data [] error-handler metadata-handler))]
+       (if-let [errs (not-empty (get-errors))]
+         (throw (ex-info "there were validation errors" {:message "there were validation errors" :errors errs :handle :validation-errors :data data}))
+         (with-meta d (merge (get-metadata) {::valid true}))))))
+  ([data type-def]
+   (apply (validate type-def) [data])))
 
 (defn merge-and-validate [new data type-def]
   (validate (merge data new) type-def))
@@ -235,9 +239,3 @@
                            ~(zipmap ks arg-vals))))]
     ctr))
 
-(defmacro def-constructor [constructor-name type-def]
-  (let [t (eval type-def)
-        ctr (get-constructor t)]
-    `(let [ctr# (get-constructor ~type-def)]
-       (defn ~constructor-name ~(get-args t)
-         (apply ctr# ~(get-arg-values t))))))
