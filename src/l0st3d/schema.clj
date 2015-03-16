@@ -111,6 +111,14 @@
       {::map-keys (map first p)
        ::map-vals (map second p)})))
 
+(defn map-of-values [key-func val-type-def]
+  (fn [data data-path error-handler metadata-handler]
+    (if (map? data)
+      (->> data vals
+           (reduce #(let [v (validate-element val-type-def %2 (conj data-path "value") error-handler metadata-handler)]
+                      (assoc %1 (key-func v) v)) {}))
+      (error-handler "should be a map" data-path data))))
+
 (defn list-of [type-def]
   (fn [data data-path error-handler metadata-handler]
     (if (sequential? data)
@@ -139,9 +147,10 @@
 
 (defn all-of [& type-defs]
   (fn [data data-path error-handler metadata-handler]
-    (let [c (map #(validate-element % data data-path error-handler metadata-handler) type-defs)]
-      (when (every? identity (doall c))
-        (first c)))))
+    (->> type-defs
+      (map #(validate-element % data data-path error-handler metadata-handler))
+      doall
+      first)))
 
 (defn count-is [message func & args]
   (fn [data data-path error-handler metadata-handler]
