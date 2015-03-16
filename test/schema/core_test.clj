@@ -78,4 +78,14 @@
           (is (= (assoc expected-person :date-of-birth #inst "2000-01-01T12:34:56.789Z" :some-numbers [1M 2.5M] :favourite-foods ["dougnuts"] :company-id 1)
                  (new-p 1 c "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5])))))
       (testing "metadata"
-        (is (= {::s/unique-paths [[:id]] ::s/valid true ::s/foreign-key-paths {:company-id :company}} (meta (s/validate test-data person))))))))
+        (is (= {::s/unique-paths [[:id]] ::s/valid true ::s/foreign-key-paths {:company-id :company}} (meta (s/validate test-data person)))))
+      (testing "validators"
+        (let [people (atom [] :validator (s/validate (s/list-of person)))
+              new-p (s/get-constructor person)
+              new-c (s/get-constructor company)
+              c (new-c 1 "ACME Ltd")
+              p (new-p 1 c "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5])]
+          (is (= [p] (swap! people conj p)))
+          (is (thrown? ExceptionInfo (swap! people conj c)))
+          (is (= [p] @people)))))))
+
