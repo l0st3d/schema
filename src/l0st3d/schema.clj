@@ -178,15 +178,18 @@
           data)))
     (meta type-def)))
 
-(defn compose [& type-defs]
+(defn compose-with [merge-fn & type-defs]
   (with-meta
     (fn [data data-path error-handler metadata-handler]
       (->> type-defs
         (map #(validate-element % data data-path error-handler metadata-handler))
-        (apply merge)))
+        (apply merge-fn)))
     (->> type-defs
       (map meta)
       (apply merge-with concat))))
+
+(defn compose [& type-defs]
+  (apply compose-with merge type-defs))
 
 ;; constraints
 (defn unique []
