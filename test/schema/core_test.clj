@@ -10,9 +10,6 @@
     (let [person (s/with-modifications
                    (s/with-defaults
                      (s/map-of :id (s/all-of (s/is-integer) (s/unique))
-                               :company-id (s/all-of (s/one-of (s/is-integer)
-                                                               (s/is-nil))
-                                                     (s/foreign-key :company))
                                :active (s/is-boolean)
                                :name (s/trimmed (s/is-string))
                                :date-of-birth (s/is-date)
@@ -29,12 +26,17 @@
                      :active true)
                    (fn [{:keys [favourite-foods] :as p}]
                      (assoc p :favourite-foods (map st/lower-case favourite-foods))))
+          employee (s/compose person
+                              (s/map-of :company-id (s/all-of (s/one-of (s/is-integer)
+                                                                        (s/is-nil))
+                                                              (s/foreign-key :company))))
           company (s/map-of :id (s/all-of (s/is-integer) (s/unique))
                             :name (s/is-string))
           company-map (s/map-of-values :id company)
           new-p (s/get-constructor person)
           new-c (s/get-constructor company)
-          
+          new-e (s/get-constructor employee)
+
           expected-person {:id 1
                            :active true
                            :name "Fred Bloggs"
@@ -78,16 +80,16 @@
       (testing "constructor"
         (let [c (new-c 1 "ACME Ltd")]
           (is (= (assoc expected-person :date-of-birth #inst "2000-01-01T12:34:56.789Z" :some-numbers [1M 2.5M] :favourite-foods ["dougnuts"] :company-id 1)
-                 (new-p 1 c "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5])))))
+                 (new-e 1 "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5] c)))))
       (testing "metadata"
-        (is (= {::s/unique-paths [[:id]] ::s/valid true ::s/foreign-key-paths {:company-id :company}} (meta (s/validate test-data person)))))
+        (is (= {::s/unique-paths [[:id]] ::s/valid true ::s/foreign-key-paths {:company-id :company}} (meta (s/validate test-data employee)))))
       (testing "validators"
-        (let [people (atom [] :validator (s/validate (s/list-of person)))
+        (let [employees (atom [] :validator (s/validate (s/list-of employee)))
               c (new-c 1 "ACME Ltd")
-              p (new-p 1 c "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5])]
-          (is (= [p] (swap! people conj p)))
-          (is (thrown? ExceptionInfo (swap! people conj c)))
-          (is (= [p] @people))))
+              e (new-e 1 "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5] c)]
+          (is (= [e] (swap! employees conj e)))
+          (is (thrown? ExceptionInfo (swap! employees conj c)))
+          (is (= [e] @employees))))
       (testing "map of values"
         (let [cs {1 (new-c 1 "ACME Ltd")
                   "2" (new-c 2 "Bizniss Ltd")}]
@@ -95,4 +97,5 @@
                   2 {:name "Bizniss Ltd" :id 2}}
                  (s/validate cs company-map)))
           (is (= [] (s/get-errors cs company-map))))))))
+
 

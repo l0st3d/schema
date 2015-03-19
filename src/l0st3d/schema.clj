@@ -1,5 +1,6 @@
 (ns l0st3d.util.schema
-  (:require [clj-time.core :as cdt])
+  (:require [clj-time.core :as cdt]
+            [l0st3d.util.schema.internal :as i])
   (:import [org.joda.time.format DateTimeFormat]
            [java.util Date])) 
 
@@ -177,6 +178,16 @@
           data)))
     (meta type-def)))
 
+(defn compose [& type-defs]
+  (with-meta
+    (fn [data data-path error-handler metadata-handler]
+      (->> type-defs
+        (map #(validate-element % data data-path error-handler metadata-handler))
+        (apply merge)))
+    (->> type-defs
+      (map meta)
+      (apply merge-with concat))))
+
 ;; constraints
 (defn unique []
   (fn [data data-path error-handler metadata-handler]
@@ -212,7 +223,7 @@
      (let [{:keys [error-handler metadata-handler get-errors get-metadata]} (collect-errors)
            d (if (-> data meta ::valid) data (validate-element type-def data [] error-handler metadata-handler))]
        (if-let [errs (not-empty (get-errors))]
-         (throw (ex-info "there were validation errors" {:message "there were validation errors" :errors errs :handle :validation-errors :data data}))
+         (throw (ex-info (str "there were validation errors" errs " " data) {:message "there were validation errors" :errors errs :handle :validation-errors :data data}))
          (with-meta d (merge (get-metadata) {::valid true}))))))
   ([data type-def]
    (apply (validate type-def) [data])))
@@ -220,29 +231,10 @@
 (defn merge-and-validate [new data type-def]
   (validate (merge data new) type-def))
 
-(defn- get-args [type-def]
-  (let [m (meta type-def)
-        ks (::map-keys m)
-        vs (::map-vals m)
-        ts (zipmap ks vs)]
-    (->> ks 
-      (map #(let [k (name %)]
-              (if-let [sub-args (not-empty (-> ts (get %) get-args))]
-                {:keys sub-args :as (symbol k)}
-                (if (re-matches #".*[-_]id" k)
-                  {(symbol k) :id}
-                  (symbol k)))))
-      (into []))))
-
-(defn- get-arg-values [type-def]
-  (->> type-def meta ::map-keys
-       (map #(symbol (name %)))
-       (into [])))
-
 (defn get-constructor [type-def]
   (let [ks (::map-keys (meta type-def))
-        args (get-args type-def)
-        arg-vals (get-arg-values type-def)
+        args (i/get-args type-def)
+        arg-vals (i/get-arg-values type-def)
         ctr (comp #(validate % type-def)
                   (eval `(fn ~args
                            ~(zipmap ks arg-vals))))]
