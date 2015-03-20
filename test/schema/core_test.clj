@@ -1,7 +1,8 @@
 (ns schema.core-test
   (:require [clojure.test :refer :all]
             [clojure.string :as st]
-            [l0st3d.util.schema :as s])
+            [l0st3d.util.schema :as s]
+            [l0st3d.util.schema.parse :as p])
   (:import [java.util Date]
            [clojure.lang ExceptionInfo]))
 
@@ -99,4 +100,31 @@
                  (s/validate cs company-map)))
           (is (= [] (s/get-errors cs company-map))))))))
 
-
+(deftest should-parse
+  (testing "parsing"
+    (let [person (p/parse {:id 1
+                           :active true
+                           :name "String"
+                           :date-of-birth (Date.)
+                           :favourite-foods ["String"]
+                           :some-numbers #{nil
+                                           [[#{1 1.0M}]
+                                            (s/matches "Should be valid" (fn [e] (every? #(-> % (> 0)) e)))]}
+                           :roles [#{:normal-user :admin-user :read-only}]})
+          new-p (s/get-constructor person)]
+      (is (= {:id 1
+              :active true
+              :name "Joe"
+              :date-of-birth (Date. 0)
+              :favourite-foods ["Apples" "Oranges"]
+              :some-numbers nil
+              :roles [:read-only]}
+             (new-p 1 true "Joe" (Date. 0) ["Apples" "Oranges"] nil [:read-only])))
+      (is (= {:id 1
+              :active true
+              :name "Joe"
+              :date-of-birth (Date. 0)
+              :favourite-foods ["Apples"]
+              :some-numbers [1 2 3.0M]
+              :roles [:read-only]}
+             (new-p 1 true "Joe" (Date. 0) ["Apples"] [1 2 3.0M] [:read-only]))))))

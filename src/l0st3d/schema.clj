@@ -27,7 +27,7 @@
 (defn- validate-element [type-def data data-path error-handler metadata-handler]
   (if (fn? type-def)
     (type-def data data-path error-handler metadata-handler)
-    (throw (ex-info "unknown type-def" {:type-def type-def}))))
+    (throw (ex-info (str "unknown type-def " type-def) {:type-def type-def}))))
 
 ;; validation fns
 (defn is-string
