@@ -17,7 +17,7 @@
                                                           (s/count-is "at least one" >= 1))
                                :some-numbers (s/one-of (s/is-nil)
                                                        (s/list-of (s/one-of (s/is-decimal)
-                                                                            (s/is-integer))))
+                                                                            (s/is-integer #(when % (-> % (< 10000))) "Should be less than 10000"))))
                                :roles (s/one-of (s/equals :normal-user)
                                                 (s/equals :admin-user)
                                                 (s/equals :read-only)))
@@ -27,7 +27,8 @@
                    (fn [{:keys [favourite-foods] :as p}]
                      (assoc p :favourite-foods (map st/lower-case favourite-foods))))
           employee (s/compose person
-                              (s/map-of :company-id (s/all-of (s/one-of (s/is-integer)
+                              (s/map-of :company-id (s/all-of (s/one-of (s/all-of (s/is-integer)
+                                                                                  (s/matches "Should be greater than 0" #(when % (-> % (> 0)))))
                                                                         (s/is-nil))
                                                               (s/foreign-key :company))))
           company (s/map-of :id (s/all-of (s/is-integer) (s/unique))

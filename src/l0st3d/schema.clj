@@ -96,6 +96,18 @@
          (error-handler error-message data-path data)
          v))))
 
+(defn matches
+  ([error-message test-func]
+   (matches error-message test-func identity))
+  ([error-message test-func coerce-func]
+   (fn [data data-path error-handler metadata-handler]
+     (when-not (test-func data)
+       (error-handler error-message data-path data))
+     (coerce-func data))))
+
+(defn is-a [class]
+  (matches (str "Should be an instance of " class) #(instance? class %)))
+
 ;; collection validation fns
 (defn map-of [& keys-and-vals]
   (with-meta
