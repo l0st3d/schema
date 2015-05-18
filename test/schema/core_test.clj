@@ -2,7 +2,8 @@
   (:require [clojure.test :refer :all]
             [clojure.string :as st]
             [l0st3d.util.schema :as s]
-            [l0st3d.util.schema.parse :as p])
+            [l0st3d.util.schema.parse :as p]
+            [l0st3d.util.schema.macros :as sm])
   (:import [java.util Date]
            [clojure.lang ExceptionInfo]))
 
@@ -32,8 +33,8 @@
                                                                                   (s/matches "Should be greater than 0" #(when % (-> % (> 0)))))
                                                                         (s/is-nil))
                                                               (s/foreign-key :company))))
-          company (s/map-of :id (s/all-of (s/is-integer) (s/unique))
-                            :name (s/is-string))
+          company (sm/def-record Company (s/map-of :id (s/all-of (s/is-integer) (s/unique))
+                                                   :name (s/is-string)))
           company-map (s/map-of-values :id company)
           new-p (s/get-constructor person)
           new-c (s/get-constructor company)
@@ -82,7 +83,10 @@
       (testing "constructor"
         (let [c (new-c 1 "ACME Ltd")]
           (is (= (assoc expected-person :date-of-birth #inst "2000-01-01T12:34:56.789Z" :some-numbers [1M 2.5M] :favourite-foods ["dougnuts"] :company-id 1)
-                 (new-e 1 "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5] c)))))
+                 (new-e 1 "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5] c)))
+          (testing "records"
+            ;;(is (instance? Company c))
+            )))
       (testing "metadata"
         (is (= {::s/unique-paths [[:id]] ::s/valid true ::s/foreign-key-paths {:company-id :company}} (meta (s/validate test-data employee)))))
       (testing "validators"
@@ -95,8 +99,8 @@
       (testing "map of values"
         (let [cs {1 (new-c 1 "ACME Ltd")
                   "2" (new-c 2 "Bizniss Ltd")}]
-          (is (= {1 {:name "ACME Ltd" :id 1}
-                  2 {:name "Bizniss Ltd" :id 2}}
+          (is (= {1 (->Company 1 "ACME Ltd")
+                  2 (->Company 2 "Bizniss Ltd")}
                  (s/validate cs company-map)))
           (is (= [] (s/get-errors cs company-map))))))))
 
