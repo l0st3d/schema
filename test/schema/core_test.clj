@@ -7,6 +7,8 @@
   (:import [java.util Date]
            [clojure.lang ExceptionInfo]))
 
+(defrecord Company [test])
+
 (deftest should-validate-some-data
   (testing "data structures"
     (let [person (s/with-modifications
@@ -15,11 +17,11 @@
                                :active (s/is-boolean)
                                :name (s/trimmed (s/is-string))
                                :date-of-birth (s/is-date)
-                               :favourite-foods (s/all-of (s/list-of (s/is-string))
+                               :favourite-foods (s/all-of (s/list-of (s/matches "Should be a string" String))
                                                           (s/count-is "at least one" >= 1))
                                :some-numbers (s/one-of (s/is-nil)
                                                        (s/list-of (s/one-of (s/is-decimal)
-                                                                            (s/is-integer #(when % (-> % (< 10000))) "Should be less than 10000"))))
+                                                                            (s/is-integer "Should be less than 10000" #(when % (-> % (< 10000)))))))
                                :roles (s/one-of (s/equals :normal-user)
                                                 (s/equals :admin-user)
                                                 (s/equals :read-only)))
@@ -68,7 +70,15 @@
         (testing "get errors"
           (is (= #{"[:roles] Should be ':normal-user' or Should be ':admin-user' or Should be ':read-only'"
                    "[:id] should be a number"}
-                 (into #{} (s/get-errors test-data person)))))
+                 (into #{} (s/get-errors test-data person))))
+          (is (= #{"[:date-of-birth] should be a date"
+                   "[:favourite-foods 0] Should be a string"
+                   "[:name] should be a string"
+                   "[:id] should be a number"}
+                 (into #{} (s/get-errors {:favourite-foods [22]} employee))))
+          (is (= #{"[] Cannot cast to Company (java.lang.ClassCastException: java.lang.String cannot be cast to clojure.lang.IPersistentMap)"
+                   "[] should be a map"}
+                 (into #{} (s/get-errors "Test" company)))))
         (testing "validation throws exceptions"
           (is (thrown? ExceptionInfo (s/validate test-data person)))))
       (testing "get data ignoring errors"
@@ -85,8 +95,7 @@
           (is (= (assoc expected-person :date-of-birth #inst "2000-01-01T12:34:56.789Z" :some-numbers [1M 2.5M] :favourite-foods ["dougnuts"] :company-id 1)
                  (new-e 1 "Fred Bloggs" "2000-01-01T12:34:56.789Z" [1 2.5] c)))
           (testing "records"
-            ;;(is (instance? Company c))
-            )))
+            (is (instance? Company c)))))
       (testing "metadata"
         (is (= {::s/unique-paths [[:id]] ::s/valid true ::s/foreign-key-paths {:company-id :company}} (meta (s/validate test-data employee)))))
       (testing "validators"

@@ -22,6 +22,11 @@
           (and (instance? java.util.regex.Pattern validation-fn) (not (re-matches validation-fn (str e))))
           (error-handler err-msg data-path e)
 
+          (instance? Class validation-fn)
+          (if (instance? validation-fn e)
+            e
+            (error-handler err-msg data-path e))
+
           :else
           e)
     (catch Exception ex
@@ -57,7 +62,7 @@
 
 (defn is-integer
   ([] (is-integer nil nil))
-  ([validation-fn err-msg]
+  ([err-msg validation-fn]
      (fn check-is-integer [e data-path error-handler metadata-handler]
        (cond (number? e) (check-valid e validation-fn error-handler data-path err-msg)
              (string? e) (try (-> e Long/parseLong (check-valid validation-fn error-handler data-path err-msg)) (catch Exception ex (error-handler "should be a number" data-path e)))
@@ -101,7 +106,7 @@
 
 (defn matches [err-msg test-func]
   (fn check-matches [data data-path error-handler metadata-handler]
-    (check-valid test-func data error-handler data-path err-msg)))
+    (check-valid data test-func error-handler data-path err-msg)))
 
 (defn coerce [error-message coerce-func type-def]
   (with-meta
@@ -109,11 +114,11 @@
       (try
         (coerce-func (validate-element type-def data data-path error-handler metadata-handler))
         (catch Exception e
-          (error-message (str error-message " (" e ")") data-path data))))
+          (error-handler (str error-message " (" e ")") data-path data))))
     (meta type-def)))
 
 (defn is-a [class]
-  (matches (str "Should be an instance of " class) (partial instance? class)))
+  (matches (str "Should be an instance of " class) class))
 
 ;; collection validation fns
 (defn map-of [& keys-and-vals]
